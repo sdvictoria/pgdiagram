@@ -7,10 +7,7 @@ package pgdiagram;
 
 import java.awt.Color;
 import java.awt.Point;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.*;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -59,6 +56,42 @@ public class PgDiagram {
         }
         System.out.println("Current dir " + appDir);
         modelFileName = PgDiagram.appDir + "/model.pgd";
+
+        //load property file
+        String propertyFilename = PgDiagram.appDir + "/app.properties";
+
+        Properties props = new Properties();
+        try {
+            InputStream is = new FileInputStream(propertyFilename);
+            props.load(is);
+            is.close();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+
+
+        String model_base_dir = props.getProperty("model_base_dir", PgDiagram.appDir);
+
+        int i = 0;
+        while(true) {
+            String url = props.getProperty("db" + i + ".connection_string");
+            if (url==null) {
+                break;
+            }
+            String user = props.getProperty("db" + i + ".user");
+            String paswword_encrypt = props.getProperty("db" + i + ".paswword_encrypt");
+
+            String password_plain = props.getProperty("db" + i + ".paswword_plain");
+
+            // if plain password is set then encrypt and override paswword_encrypt
+            if (password_plain!=null) {
+                // encrypt
+                // paswword_encrypt = encrypt(password_plain);
+            }
+            i++;
+        }
+
+        // fetch model directories
         
         
         Model model_db = null;
