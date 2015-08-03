@@ -53,12 +53,12 @@ public class FraQuery extends JFrame {
         
         btnRun.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent arg0) {       
-                runQuery();
+                runQuery(PgDiagram.dbe);
             }
         });  
     }
     
-    public void runQuery() {
+    public void runQuery(DBEntry dbe) {
         try {
             String sql = txtInput.getText().trim();
             if (sql.toLowerCase().contains("delete")) {
@@ -66,7 +66,7 @@ public class FraQuery extends JFrame {
                 return;
             }
             if (sql.length()>0) {            
-                Connection c = PgDiagram.getConnectionPostgres("postgres");
+                Connection c = PgDiagram.getConnectionPostgres(dbe);
                 Statement st = c.createStatement();
                 ResultSet rs = st.executeQuery(sql);
                 

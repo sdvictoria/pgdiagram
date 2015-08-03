@@ -24,7 +24,6 @@ public class Table {
     
     Column[] orderedColumns = null;
     List<String[]> primaryKeys = new ArrayList();
-    
     List<String[]> uniqueKeys = new ArrayList();
     List<String[]> indices = new ArrayList();    
     long recordCount = -1;

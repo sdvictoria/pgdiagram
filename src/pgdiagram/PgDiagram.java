@@ -14,13 +14,10 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Date;
-import java.util.List;
-import java.util.Properties;
-import java.util.UUID;
+import java.util.*;
+import javax.crypto.Cipher;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
 /**
  *
@@ -33,22 +30,33 @@ public class PgDiagram {
     static boolean loadFromDB = true;
     static boolean edb = false;
     static String currentQueryID = "";
-
+    static DBEntry dbe;
+	
+	static byte[] keyBytes1 = null;
+    static byte[] keyBytes2 = null;
+    static {
+        try {
+            keyBytes1 = new String(".G62_bb^5^BrTy65").getBytes("UTF-8");
+            keyBytes2 = new String("rt_5*6*@89%oe#!4").getBytes("UTF-8");
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+	
     public static void main(String[] args) {
         PgDiagram app = new PgDiagram();
         app.go();
     }
    
     void go() {
-        
-        if (false) {
-            testConnectionAbort();
-            return;
-        }
-        if (false) {
-            testQueryOutput();
-            return;
-        }
+		
+		if (false) {
+			String base64 = encrypt("test 123456dfgfdggsarbertuyernrtebytwbyweybertydfhbdfdtfydtbhfdb");
+			String s = decrypt(base64);
+			System.out.println("result:"+ s);
+			return;
+		}
+
         appDir = new File(".").getAbsolutePath();
         appDir = appDir.replace("\\", "/");
         if (appDir.endsWith("/.")) {
@@ -60,6 +68,14 @@ public class PgDiagram {
         //load property file
         String propertyFilename = PgDiagram.appDir + "/app.properties";
 
+
+        if (!new File(propertyFilename).canRead()) {
+            System.out.println("Cannot read property file '" + propertyFilename + "'");
+            System.exit(-1);
+        };
+
+
+        System.out.println("Reading property file: " + propertyFilename);
         Properties props = new Properties();
         try {
             InputStream is = new FileInputStream(propertyFilename);
@@ -67,76 +83,308 @@ public class PgDiagram {
             is.close();
         } catch (Exception ex) {
             ex.printStackTrace();
+            System.exit(-1);
         }
 
 
-        String model_base_dir = props.getProperty("model_base_dir", PgDiagram.appDir);
+        String model_base_dir = props.getProperty("models_dir", PgDiagram.appDir);
+        System.out.println("Models directory " + model_base_dir);
 
+        List<DBEntry> dbEntries = new ArrayList();
         int i = 0;
         while(true) {
-            String url = props.getProperty("db" + i + ".connection_string");
-            if (url==null) {
+
+            String description = props.getProperty("db_" + i + ".description");
+            if (description==null) {
                 break;
             }
-            String user = props.getProperty("db" + i + ".user");
-            String paswword_encrypt = props.getProperty("db" + i + ".paswword_encrypt");
+            String url = props.getProperty("db_" + i + ".url");
+            String user = props.getProperty("db_" + i + ".user");
+            String password_plain = props.getProperty("db_" + i + ".password_plain");
+            String password_encrypt = props.getProperty("db_" + i + ".password_encrypt");
 
-            String password_plain = props.getProperty("db" + i + ".paswword_plain");
+            url = trim(url);
+            user = trim(user);
+            password_plain = trim(password_plain);
+            password_encrypt = trim(password_encrypt);
 
             // if plain password is set then encrypt and override paswword_encrypt
             if (password_plain!=null) {
-                // encrypt
-                // paswword_encrypt = encrypt(password_plain);
+                // encrypt plain password
+                // password_encrypt = encrypt(password_plain);
+                password_encrypt = encrypt(password_plain);
             }
+            dbEntries.add(new DBEntry(description, url, user, password_encrypt));
             i++;
         }
 
+        if (dbEntries.size()==0) {
+            System.out.println("No database entries defined '" + propertyFilename + "'");
+            return;
+        }
+
+        dbe = dbEntries.get(2);
+        DBEntry dbe2 = dbEntries.get(3);
+
+        if (false) {
+            testConnectionAbort(dbe);
+            return;
+        }
+        if (false) {
+            testQueryOutput(dbe);
+            return;
+        }
         // fetch model directories
         
-        
         Model model_db = null;
+        Model model_db2 = null;
         Model model_file = null;
         if (loadFromDB) {          
             model_db = null;
-            String dbName_ = "postgres";
-            Connection conn = getConnectionPostgres(dbName_);            
-            model_db = loadModelFromDB(conn);   
-            if (true) {
-                Date d1 = new Date();   
-                for (Database db:model_db.databases) {
-                    loadContraints(db, conn);
-                    loadIndexes(db, conn);
-                }                    
-                Date d2 = new Date();
-                System.out.println("fetch constraint list:" + (d2.getTime()-d1.getTime()) + " msec");                    
-            }      
+            model_db2 = null;
+            System.out.println("Connecting to " + dbe.description + " (" + dbe.url + ")");
+            Connection conn = getConnectionPostgres(dbe);
+            System.out.println("Connecting to " + dbe2.description + " (" + dbe2.url + ")");
+            Connection conn2 = getConnectionPostgres(dbe2);
+            if (conn!=null) {
+
+                model_db = loadModelFromDB(conn);
+                model_db2 = loadModelFromDB(conn2);
+
+                // printModel(model_db);
+                log (dbe.description + "->" + dbe2.description);
+                compareModels(model_db, model_db2, "+");
+                // log (dbe2.description + "->" + dbe.description);
+                compareModels(model_db2, model_db, "-");
+
+                for (Database db : model_db.databases) {
+                    for (Schema s : db.schemas) {
+                        for (Table t : s.tables.values()) {
+                            randomizeLocations(s.tables.values().toArray(new Table[0]));
+                        }
+                    }
+                }
+                try {
+                    conn.close();
+                    conn2.close();
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+            }
+        }
+
+        if (false) {
+            FraMain fra = new FraMain();
+            fra.setModel(model_db);
+        }
+//        model_file = fra.loadModel(modelFileName);
+//        copyLocations(model_file, model_db);
+
+    }
+	
+    String trim(String s) {
+        if (s!=null) {
+            return s.trim();
+        }
+        return null;
+    }
+
+    public static String encrypt(String s){
+        try {
+            byte[] input = new String(s).getBytes("UTF-8");
+            // wrap key data in Key/IV specs to pass to cipher
+            SecretKeySpec key = new SecretKeySpec(keyBytes1, "AES");
+            IvParameterSpec ivSpec = new IvParameterSpec(keyBytes2);
+            // create the cipher with the algorithm you choose
+            // see javadoc for Cipher class for more info, e.g.
+            Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            cipher.init(Cipher.ENCRYPT_MODE, key, ivSpec);
+            byte[] encrypted = new byte[cipher.getOutputSize(input.length)];
+            int enc_len = cipher.update(input, 0, input.length, encrypted, 0);
+            enc_len += cipher.doFinal(encrypted, enc_len);
+            encrypted = Base64.getEncoder().encode(encrypted);
+            return new String(encrypted, "US-ASCII");
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        return null;
+    }
+    
+    public static String decrypt(String base64){
+        try {
+            SecretKeySpec key = new SecretKeySpec(keyBytes1, "AES");
+            IvParameterSpec ivSpec = new IvParameterSpec(keyBytes2);
+            Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            cipher.init(Cipher.DECRYPT_MODE, key, ivSpec);
+            // = Base64.getDecoder().decode(encrypted);
             
-            for (Database db:model_db.databases) {
-                for (Schema s:db.schemas) {
-                    for (Table t:s.tables.values()) {
-                        randomizeLocations(s.tables.values().toArray(new Table[0]));
+            byte[] encrypted = base64.getBytes("US-ASCII");
+            encrypted = Base64.getDecoder().decode(encrypted);
+            int enc_len = encrypted.length;
+            byte[] decrypted = new byte[cipher.getOutputSize(enc_len)];
+            int dec_len = cipher.update(encrypted, 0, enc_len, decrypted, 0);
+            dec_len += cipher.doFinal(decrypted, dec_len);
+
+            String s = new String(decrypted, "UTF-8");
+            s = s.substring(0, dec_len);
+            return s;
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        return null;
+    }
+
+    public boolean compareModels(Model m0, Model m1, String sign) {
+        boolean theSame = false;
+
+        int table_ok_count = 0;
+        int table_nok_count = 0;
+
+
+        for (int db_idx = 0; db_idx<m0.databases.size(); db_idx++) {
+            Database db0 = m0.databases.get(db_idx);
+            Database db1 = m1.getDatabase(db0.name);
+
+            if (db1==null) {
+                log(sign + " db " + db0.name);
+            }
+            else {
+                for (int schema_idx=0; schema_idx<db0.schemas.size(); schema_idx++) {
+                    Schema schema0 = db0.schemas.get(schema_idx);
+                    //log("- ** schema " + schema0.name);
+                    Schema schema1 = db1.getSchema(schema0.name);
+                    if (schema1==null) {
+                        log(sign + " schema " + schema0.name);
+                    }
+                    else {
+
+                        List<String> orderedTableNames = schema0.getOrderedTableNames();
+                        for (int table_idx=0; table_idx<orderedTableNames.size(); table_idx++) {
+                            String tableName = orderedTableNames.get(table_idx);
+                            //log("- ** table " + schema0.name +  "." + tableName);
+                            Table t0 = schema0.tables.get(tableName);
+                            Table t1 = schema1.tables.get(tableName);
+                            if (t1==null) {
+                                log(sign + " table " + schema0.name +  "." + tableName);
+                            }
+                            else {
+                                String[] columnNames = t0.columns.keySet().toArray(new String[0]);
+                                Arrays.sort(columnNames);
+                                for (int col_idx=0; col_idx<columnNames.length; col_idx++) {
+                                    String columnName = columnNames[col_idx];
+                                    // log("- ** " + tableName + "." + schema0.name +  "." + tableName + "." + columnName);
+                                    Column col0 = t0.columns.get(columnName);
+                                    Column col1 = t1.columns.get(columnName);
+
+                                    if (col1==null) {
+                                        log(sign + " column " + schema0.name +  "." + tableName + "." + columnName);
+                                    }
+                                    else {
+
+                                    }
+                                }
+
+                            }
+                        }
                     }
                 }
             }
-            
-            try {
-                conn.close();
-            } catch (Exception ex) {ex.printStackTrace();}
         }
 
-        FraMain fra = new FraMain();
-        model_file = fra.loadModel(modelFileName);     
-        copyLocations(model_file, model_db);        
-        fra.setModel(model_db);
-    }
-    
-    public boolean compareModels(Model m0, Model m1) {
-        boolean theSame = false;
-        
 //        List tableNames
 //        for (m0.tables.
-        
+
         return theSame;
+    }
+
+    public void printModel(Model m) {
+
+
+
+        for (Database db:m.databases) {
+            for (Schema s:db.schemas) {
+                List<String> orderedTableNames = s.getOrderedTableNames();
+
+                for (int nameidx=0; nameidx<orderedTableNames.size(); nameidx++) {
+                    String tableName = orderedTableNames.get(nameidx);
+                    Table t = s.getTable(tableName);
+                    // System.out.println("[" + nameidx + "] " + t.getName());  -- not useable with diff
+                    System.out.println(t.getName());
+                    Column[] columns  = t.getColumnsInOrder();
+                    if (columns!=null) {
+                        for (Column c : columns) {
+                            System.out.println("    col [" + c.order + "]:" + c.name + "\t" + c.colType + "\t" + (c.isNotNull?"not null":"nullable"));
+                        }
+                    }
+
+                    for (int idx=0; idx<t.primaryKeys.size(); ++idx) {
+                        String sarr[]=t.primaryKeys.get(idx);
+                        if (sarr.length>0) {
+                            System.out.print("    pk [" + idx + "]:");
+                            for (int idx2=0; idx2<sarr.length; idx2++) {
+                                if (idx2>0) {
+                                    System.out.print(", ");
+                                }
+                                System.out.print(sarr[idx2]);
+                            }
+                            System.out.println();
+                        }
+                    }
+
+                    for (int idx=0; idx<t.uniqueKeys.size(); ++idx) {
+                        String sarr[]=t.uniqueKeys.get(idx);
+                        if (sarr.length>0) {
+                            System.out.print("    unique [" + idx + "]:");
+                            for (int idx2=0; idx2<sarr.length; idx2++) {
+                                if (idx2>0) {
+                                    System.out.print(", ");
+                                }
+                                System.out.print(sarr[idx2]);
+                            }
+                            System.out.println();
+                        }
+                    }
+                    for (int idx=0; idx<t.indices.size(); ++idx) {
+                        String sarr[]=t.indices.get(idx);
+                        if (sarr.length>0) {
+                            System.out.print("    index [" + idx + "]:");
+                            for (int idx2=0; idx2<sarr.length; idx2++) {
+                                if (idx2>0) {
+                                    System.out.print(", ");
+                                }
+                                System.out.print(sarr[idx2]);
+                            }
+                            System.out.println();
+                        }
+                    }
+
+                    List<ForeignKey> list = s.getKFListFromTable(tableName);
+
+                    for (int idx=0; idx<list.size(); idx++) {
+                        ForeignKey fk = list.get(idx);
+                        System.out.print("    fk [" + idx + "]:");
+
+                        for (int idx2=0; idx2<fk.fromCols.length; idx2++) {
+                            if (idx2>0) {
+                                System.out.print(", ");
+                            }
+                            System.out.print(fk.fromCols[idx2]);
+                        }
+                        System.out.print(" -> " + fk.toTable.toString() + ":");
+                        for (int idx2=0; idx2<fk.toCols.length; idx2++) {
+                            if (idx2>0) {
+                                System.out.print(", ");
+                            }
+                            System.out.print(fk.toCols[idx2]);
+                        }
+                        System.out.println();
+                    }
+                }
+            }
+            //loadContraints(db, );
+            //loadIndexes(db, conn);
+        }
+
     }
 
     public static Model toModel(String filename) {
@@ -768,6 +1016,15 @@ public class PgDiagram {
             }
             
             st.close();
+
+            Date d1 = new Date();
+            for (Database db : model.databases) {
+                loadContraints(db, conn);
+                loadIndexes(db, conn);
+            }
+            Date d2 = new Date();
+            System.out.println("fetch constraint list:" + (d2.getTime() - d1.getTime()) + " msec");
+
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -835,7 +1092,7 @@ public class PgDiagram {
                         // get foreign table
                         Table ftable = db.getTable(ftable_schema_name, ftable_name);
                         if (ftable!=null) {
-                            System.out.print("fk: " + table.name + " -> " + ftable.getName() + ": ");               
+                            // System.out.print("fk: " + table.name + " -> " + ftable.getName() + ": ");
                             ftable_columns = ftable_columns.replaceAll("\\{", "");
                             ftable_columns = ftable_columns.replaceAll("}", "");
                             int iarrf[] = toIntegerArray(ftable_columns, ",");
@@ -904,33 +1161,26 @@ public class PgDiagram {
         return getStringList(sql, conn);        
     }
       
-    public static Connection getConnectionPostgres(String dbName) {
-
-        String url = null;
-        String user = null;
-        String pwd = null;
+    public static Connection getConnectionPostgres(DBEntry dbe) {
 
         if (edb) {
         }
         else {
             // local
-            url = "jdbc:postgresql://localhost:5432";
-            // url = "jdbc:postgresql://127.0.0.1:5432";
-            
-            user = "superuser";
-            pwd = "super";                            
-//            user = "postgres";
-//            pwd = "postgres";                            
-            
-            // dbName = "postgres";
-            dbName = "postgres";
+//            url = "jdbc:postgresql://localhost:5432";
+//
+//
+//            user = "superuser";
+//            pwd = "super";
+//            dbName = "postgres";
              
         }
 
         Connection conn = null;
         try {
-                Class.forName("org.postgresql.Driver");                        
-                conn = DriverManager.getConnection(url + "/" + dbName, user, pwd);						
+                Class.forName("org.postgresql.Driver");
+                String password = decrypt(dbe.password_encrypt);
+                conn = DriverManager.getConnection(dbe.url, dbe.user, password);
         } catch (Exception e) {
                 // TODO Auto-generated catch block
                 e.printStackTrace();
@@ -938,8 +1188,8 @@ public class PgDiagram {
         return conn;
     }    
     
-    public static void recordCount(Model mdl) {        
-        Connection c = PgDiagram.getConnectionPostgres("postgres");
+    public static void recordCount(Model mdl, DBEntry dbe) {
+        Connection c = PgDiagram.getConnectionPostgres(dbe);
         for (Database db:mdl.databases) {
             for(Schema schema:db.schemas) {
                 for(Table table:schema.tables.values()) {
@@ -982,8 +1232,8 @@ public class PgDiagram {
         return sql;
     }
     
-    public static void getCardinals(Model mdl) {
-        Connection c = PgDiagram.getConnectionPostgres("postgres");
+    public static void getCardinals(Model mdl, DBEntry dbe) {
+        Connection c = PgDiagram.getConnectionPostgres(dbe);
         for (Database db:mdl.databases) {
             for(Schema schema:db.schemas) {
                 for(List<ForeignKey> fkList:schema.foreignKeys.values()) {
@@ -1027,49 +1277,49 @@ having count(postgres.public.sdv_whitelist.id) > 1
         }
         close(c);
     }
+//
+//    boolean updateModel(Model org, Model update) {
+//
+//        compareModel(org, update);
+//
+//        return false;
+//    }
     
-    boolean updateModel(Model org, Model update) {
-        
-        compareModel(org, update);
-        
-        return false;
-    }
-    
-    void compareModel(Model m0, Model m1) {
-        List<Object> diff = new ArrayList();
-        for (Database db0:m0.databases) {
-            Database db1 = m1.getDatabase(db0.name);
-            if (db1==null) {
-                diff.add(db0);
-                continue;
-            }
-            for (Schema schema0:db0.schemas) {
-                Schema schema1 = db1.getSchema(schema0.name);
-                if (schema1==null) {
-                    diff.add(schema0);
-                    continue;
-                }
-                
-                for (Table table0:schema0.tables.values()) {                    
-                    Table table1 = m1.getTable(db0.name, schema0.name, table0.name);
-                    if (table1==null) {
-                        diff.add(schema0);
-                        continue;
-                    }                    
-                    // compareTable(table0, table1);
-                }
-                
-//                for (ForeignKey fk0:schema0.foreignKeys) {                    
-//                    ForeignKey fk1 = m1.getForeignKey(db0.name, schema0.name, fk0.constraint_name);
-//                    if (fk1==null) {
-//                        diff.add(fk0);
-//                        continue;
-//                    }                    
-//                    // compareForeignKey();
+//    void compareModel(Model m0, Model m1) {
+//        List<Object> diff = new ArrayList();
+//        for (Database db0:m0.databases) {
+//            Database db1 = m1.getDatabase(db0.name);
+//            if (db1==null) {
+//                diff.add(db0);
+//                continue;
+//            }
+//            for (Schema schema0:db0.schemas) {
+//                Schema schema1 = db1.getSchema(schema0.name);
+//                if (schema1==null) {
+//                    diff.add(schema0);
+//                    continue;
 //                }
-            }
-        }
-    }
+//
+//                for (Table table0:schema0.tables.values()) {
+//                    Table table1 = m1.getTable(db0.name, schema0.name, table0.name);
+//                    if (table1==null) {
+//                        diff.add(schema0);
+//                        continue;
+//                    }
+//                    // compareTable(table0, table1);
+//                }
+//
+////                for (ForeignKey fk0:schema0.foreignKeys) {
+////                    ForeignKey fk1 = m1.getForeignKey(db0.name, schema0.name, fk0.constraint_name);
+////                    if (fk1==null) {
+////                        diff.add(fk0);
+////                        continue;
+////                    }
+////                    // compareForeignKey();
+////                }
+//            }
+//        }
+//    }
     
     void copyLocations(Model model_from, Model model_to) {
         for (Database db:model_to.databases) {
@@ -1085,8 +1335,8 @@ having count(postgres.public.sdv_whitelist.id) > 1
         }    
     }
     
-    void testConnectionAbort() {
-        Connection conn1 = getConnectionPostgres("postgres");
+    void testConnectionAbort(DBEntry dbe) {
+        Connection conn1 = getConnectionPostgres(dbe);
         ExecuteQueryRunnable r = new ExecuteQueryRunnable("select pg_sleep(40000)", conn1);
         Thread t = new Thread(r);
         t.start();
@@ -1098,7 +1348,7 @@ having count(postgres.public.sdv_whitelist.id) > 1
         }
         
         try {
-            Connection conn2 = getConnectionPostgres("postgres");
+            Connection conn2 = getConnectionPostgres(dbe);
             stopCurrentQuery(r, conn2);
         } catch (Exception ex) {
             ex.printStackTrace();
@@ -1141,8 +1391,8 @@ having count(postgres.public.sdv_whitelist.id) > 1
         }
     }
     
-    void testQueryOutput() {
-        Connection conn = getConnectionPostgres("postgres");
+    void testQueryOutput(DBEntry dbe) {
+        Connection conn = getConnectionPostgres(dbe);
         String sql1 = "select * from TestTypeNumeric";
         String sql2 = "select * from TestComposite";
         String sql3 = "select * from TestArrays";
@@ -1151,6 +1401,11 @@ having count(postgres.public.sdv_whitelist.id) > 1
         getQueryOutput(sql3, conn);
         
     }
+
+    void log(String s) {
+        System.out.println(s);
+    }
+
     void getQueryOutput(String sql, Connection conn) {
         try {
             Statement st = conn.createStatement();

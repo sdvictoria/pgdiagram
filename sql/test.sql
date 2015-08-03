@@ -124,7 +124,7 @@ CREATE TABLE TestComposite (
 
 CREATE TABLE TestOID (
     a    integer
-) WITH OIDS
+) WITH OIDS;
 
 
 insert into TestTypeNumeric values (0,0,0,0,0,0,0,0,0,'$1');

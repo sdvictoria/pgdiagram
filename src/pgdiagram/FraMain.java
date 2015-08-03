@@ -228,7 +228,7 @@ public class FraMain extends JFrame {
         btnRecordCount.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent arg0) {                     
                 if (model!=null) {
-                    PgDiagram.recordCount(model);
+                    PgDiagram.recordCount(model, PgDiagram.dbe);
                     canvas.refresh();
                 }
             }
@@ -237,7 +237,7 @@ public class FraMain extends JFrame {
         btnCardinals.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent arg0) {                     
                 if (model!=null) {
-                    PgDiagram.getCardinals(model);
+                    PgDiagram.getCardinals(model, PgDiagram.dbe);
                     canvas.refresh();
                 }
             }

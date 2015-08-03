@@ -145,18 +145,20 @@ public class CnvDiagram extends JPanel {
                             y+= 200;
                         }
                     }
-                    Table from_table = model.getTable("postgres", "public", "testarrays");
-                    String from_cols[] = {from_table.getColumnName(0)};
-                    Table to_table = model.getTable("postgres", "public", "testa");
-                    String to_cols[] = {to_table.getColumnName(0)};
-                    int iarr[] = {0};
-                    List<Point> lineControlPoints = new ArrayList();
-                    lineControlPoints.add(new Point(800, 300));
-                    lineControlPoints.add(new Point(900, 400));
-                    lineControlPoints.add(new Point(950, 600));
-                    tmp_fk = schema.addFK("test_contstraint123456", "NO MATCH", "CASC_UPDATE", "CASC_DEL", from_table, from_cols, to_table, to_cols, "1", "N", iarr, lineControlPoints, Color.red);
-                    CanvasGraphicForeignKey cgfk = new CanvasGraphicForeignKey(tmp_fk);           
-                    canvasGraphicsConnections.add(cgfk);
+                    if (false) {
+                        Table from_table = model.getTable("postgres", "public", "testarrays");
+                        String from_cols[] = {from_table.getColumnName(0)};
+                        Table to_table = model.getTable("postgres", "public", "testa");
+                        String to_cols[] = {to_table.getColumnName(0)};
+                        int iarr[] = {0};
+                        List<Point> lineControlPoints = new ArrayList();
+                        lineControlPoints.add(new Point(800, 300));
+                        lineControlPoints.add(new Point(900, 400));
+                        lineControlPoints.add(new Point(950, 600));
+                        tmp_fk = schema.addFK("test_contstraint123456", "NO MATCH", "CASC_UPDATE", "CASC_DEL", from_table, from_cols, to_table, to_cols, "1", "N", iarr, lineControlPoints, Color.red);
+                        CanvasGraphicForeignKey cgfk = new CanvasGraphicForeignKey(tmp_fk);
+                        canvasGraphicsConnections.add(cgfk);
+                    }
                 }
             }
         }                      
@@ -169,12 +171,12 @@ public class CnvDiagram extends JPanel {
             if (cg instanceof CanvasGraphicTable) {
                 CanvasGraphicTable cgt = (CanvasGraphicTable) cg;
                 Table table = (Table) cgt.data;
-                if (table==tmp_fk.fromTable) {
-                    cg_from = cgt;
-                }
-                else if (table==tmp_fk.toTable) {
-                    cg_to = cgt;
-                }
+//                if (table==tmp_fk.fromTable) {
+//                    cg_from = cgt;
+//                }
+//                else if (table==tmp_fk.toTable) {
+//                    cg_to = cgt;
+//                }
             }
         }
         

@@ -7,10 +7,7 @@ package pgdiagram;
 
 import java.awt.Color;
 import java.awt.Point;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  *
@@ -93,5 +90,13 @@ public class Schema {
         }
         return list;
     }
-    
+
+    public List<String> getOrderedTableNames() {
+        List<String> orderedTableNames = new ArrayList();
+        for (Table t : tables.values()) {
+            orderedTableNames.add(t.getName());
+        }
+        Collections.sort(orderedTableNames);
+        return orderedTableNames;
+    }
 }
